@@ -8,8 +8,8 @@ class CircularDependencyError extends Error {
     }
 }
 exports.CircularDependencyError = CircularDependencyError;
-CircularDependencyError.type = { symbol: "CircularDependencyError_56ca52e2270419c5136bd03b608b5bcd", interface: false, ancesttors: [
-        { symbol: "Error_ca24f370844267306bbc638896f8d9ae", interface: true, ancesttors: [] }
+CircularDependencyError.type = { symbol: "CircularDependencyError_56ca52e2270419c5136bd03b608b5bcd", interface: false, ancestors: [
+        { symbol: "Error_ca24f370844267306bbc638896f8d9ae", interface: true, ancestors: [] }
     ] };
 CircularDependencyError.constructorSigniture = [
     { symbol: "string", array: false, kind: 3 },
@@ -21,8 +21,8 @@ class MissingDependencyError extends Error {
     }
 }
 exports.MissingDependencyError = MissingDependencyError;
-MissingDependencyError.type = { symbol: "MissingDependencyError_4cfaf551394ab16b44202bc72f6ee7a0", interface: false, ancesttors: [
-        { symbol: "Error_ca24f370844267306bbc638896f8d9ae", interface: true, ancesttors: [] }
+MissingDependencyError.type = { symbol: "MissingDependencyError_4cfaf551394ab16b44202bc72f6ee7a0", interface: false, ancestors: [
+        { symbol: "Error_ca24f370844267306bbc638896f8d9ae", interface: true, ancestors: [] }
     ] };
 MissingDependencyError.constructorSigniture = [
     { symbol: "string", array: false, kind: 3 },
@@ -34,8 +34,8 @@ class NotResolvableDependencyError extends Error {
     }
 }
 exports.NotResolvableDependencyError = NotResolvableDependencyError;
-NotResolvableDependencyError.type = { symbol: "NotResolvableDependencyError_14897bff567efff898760fcbec41c9a0", interface: false, ancesttors: [
-        { symbol: "Error_ca24f370844267306bbc638896f8d9ae", interface: true, ancesttors: [] }
+NotResolvableDependencyError.type = { symbol: "NotResolvableDependencyError_14897bff567efff898760fcbec41c9a0", interface: false, ancestors: [
+        { symbol: "Error_ca24f370844267306bbc638896f8d9ae", interface: true, ancestors: [] }
     ] };
 NotResolvableDependencyError.constructorSigniture = [
     { symbol: "string", array: false, kind: 3 }
@@ -175,14 +175,14 @@ function setFromType(type) {
 function createInjectNodeFromClass(cls) {
     let result = { typeSet: null, resolve: null, requirements: null };
     result.typeSet = setFromType(Reflector_1.refDataFromClass(cls).type);
-    result.requirements = Reflector_1.refDataFromClass(cls).constructorSigniture;
+    result.requirements = solveParamList(Reflector_1.refDataFromClass(cls).constructorSigniture);
     result.resolve = (params) => new cls(...params);
     return result;
 }
 function createSingletonInjectNodeFromClass(cls) {
     let result = { typeSet: null, resolve: null, requirements: null };
     result.typeSet = setFromType(Reflector_1.refDataFromClass(cls).type);
-    result.requirements = Reflector_1.refDataFromClass(cls).constructorSigniture;
+    result.requirements = solveParamList(Reflector_1.refDataFromClass(cls).constructorSigniture);
     let store = null;
     result.resolve = (params) => {
         if (!store) {
@@ -238,73 +238,80 @@ class DiContainer {
             return null;
     }
     resolveParamList(pl, cdpiCheck) {
-        let error = false;
         let result = [];
-        pl.forEach((ptype) => {
+        if (pl.every((ptype) => {
             let resolved = this.resolveParamTypeKind(ptype, cdpiCheck);
             if (resolved) {
                 result.push(resolved);
+                return true;
             }
-            else
-                error = true;
-        });
-        if (!error)
+            return false;
+        }))
             return result;
-        else
-            return null;
+        return null;
     }
     resolveTypeRefParam(pt, cdpiCheck) {
         let nodes = this.nodeMap.get(pt.symbol);
         if (!nodes)
             return null;
-        else if (Reflector_1.isArray(pt)) {
-            let result = [];
-            let error = false;
-            nodes.forEach((injectNode) => {
-                let params = this.resolveParamList(injectNode.requirements, cdpiCheck);
-                if (params) {
-                    result.push(injectNode.resolve(params));
-                }
-                else {
-                    error = true;
-                }
-            });
-            if (!error)
-                return result;
-            else
-                return null;
-        }
-        else {
-            let params = null;
-            let i;
-            for (i = 0; i < nodes.length && !params; ++i) {
-                let params = this.resolveParamList(nodes[i].requirements, cdpiCheck);
+        let result = [];
+        let finder = (injectNode) => {
+            let params = this.resolveParamList(injectNode.requirements, cdpiCheck);
+            if (params) {
+                result.push(injectNode.resolve(params));
+                return true;
             }
-            if (params)
-                return nodes[i].resolve(params);
             else
-                return null;
-        }
+                return false;
+        };
+        if (Reflector_1.isArray(pt))
+            if (nodes.every(finder))
+                return result;
+        if (nodes.some(finder))
+            return result[0];
+        return null;
     }
     resolveUnionParam(pt, cdpiCheck) {
-        if (Reflector_1.isArray(pt) && !Reflector_1.isArray(pt.subType[0])) {
-            pt.subType.forEach((st) => {
-                st.array = true;
-            });
-        }
         let result = null;
-        for (let i = 0; i < pt.subType.length && !result; ++i) {
-            result = this.resolveParamTypeKind(pt.subType[i], cdpiCheck);
-        }
-        return result;
+        if (pt.subType.some(pts => {
+            return result = this.resolveParamTypeKind(pts, cdpiCheck);
+        }))
+            return result;
+        return null;
     }
     resolveIntersectionParam(pt, cdpiCheck) {
-        let nodes = this.nodeMap.get(pt.symbol);
-        if (!nodes)
+        let smallest = null;
+        let smallestLength = Infinity;
+        if (!pt.subType.every((t) => {
+            if (this.nodeMap.has(t.symbol)) {
+                let sm;
+                if ((sm = this.nodeMap.get(t.symbol)).length < smallestLength) {
+                    smallestLength = sm.length;
+                    smallest = sm;
+                }
+                return true;
+            }
+            else
+                return false;
+        }))
             return null;
-        else if (Reflector_1.isArray(pt)) {
-            return nodes.map((InjectNode) => { });
-        }
+        let result = [];
+        let finder = (le) => {
+            if (!(le.requirements) || pt.subType.every(pt => le.typeSet.has(pt.symbol))) {
+                let resolved = this.resolveParamList(le.requirements, cdpiCheck);
+                if (resolved) {
+                    result.push(le.resolve(resolved));
+                    return true;
+                }
+                return false;
+            }
+        };
+        if (Reflector_1.isArray(pt))
+            if (smallest.every(finder))
+                return result;
+        if (smallest.some(finder))
+            return result[0];
+        return null;
     }
     registerClass(cls) {
         this.registerInjectNode(createInjectNodeFromClass(cls));
@@ -318,7 +325,13 @@ class DiContainer {
     registerProvier(cls, func) {
         this.registerInjectNode(createInjectNodeFromFunction(cls, func));
     }
+    resolveClass(cls) {
+        return this.resolveTypeRefParam(Reflector_1.createTypeReffFromClass(cls), new Set());
+    }
+    resolveAllClass(cls) {
+        return this.resolveTypeRefParam(Reflector_1.createTypeReffFromClass(cls, true), new Set());
+    }
 }
 exports.DiContainer = DiContainer;
-DiContainer.type = { symbol: "DiContainer_0df6ca7255ce8baaca8b759f7ac34cd2", interface: false, ancesttors: [] };
+DiContainer.type = { symbol: "DiContainer_d0b6eea2411c963d096faa60bb293f4a", interface: false, ancestors: [] };
 DiContainer.constructorSigniture = [];

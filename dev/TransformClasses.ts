@@ -1,6 +1,7 @@
-import { SourceFile, Program, ClassDeclaration, forEachChild, Node, SyntaxKind, Identifier, isImportDeclaration, Declaration, isIdentifier, isInterfaceDeclaration, InterfaceDeclaration, isClassDeclaration, createProperty, createModifier, createIdentifier, createArrayLiteral, createObjectLiteral, createPropertyAssignment, createStringLiteral, createTrue, ObjectLiteralExpression, createFalse, createNodeArray, isConstructorDeclaration, isUnionTypeNode, isArrayTypeNode, isTypeReferenceNode, isParenthesizedTypeNode, isIntersectionTypeNode, createNumericLiteral, Expression } from "typescript";
+import { SourceFile, Program, ClassDeclaration, forEachChild, Node, SyntaxKind, Identifier, isImportDeclaration, Declaration, isIdentifier, isInterfaceDeclaration, InterfaceDeclaration, isClassDeclaration, createProperty, createModifier, createIdentifier, createArrayLiteral, createObjectLiteral, createPropertyAssignment, createStringLiteral, createTrue, ObjectLiteralExpression, createFalse, createNodeArray, isConstructorDeclaration, isUnionTypeNode, isArrayTypeNode, isTypeReferenceNode, isParenthesizedTypeNode, isIntersectionTypeNode, createNumericLiteral, Expression, Type, InterfaceType, TypeFlags } from "typescript";
 import { MD5 } from 'crypto-js';
 import { ParamTypeT, TypeT, ParamTypeKind } from "./Types";
+import * as util from 'util'
 
 export function transformClasses(sf: SourceFile, program: Program) {
     let classLikes = getClassLikeDeclarations(sf);
@@ -8,8 +9,8 @@ export function transformClasses(sf: SourceFile, program: Program) {
         if (isClassDeclaration(classDec)) {
             let params: ParamTypeT[] = getSignatureFromConstructor(classDec, program);
             addConstructorSignatureToClass(classDec, params);
-            let type: TypeT = getType(classDec, program);
-            addTypeToClass(classDec, type);
+            let types: string[] = getType(classDec, program);
+            addTypeToClass(classDec, types);
         }
     });
 }
@@ -31,91 +32,87 @@ function getDeclarationByIdentifier(identifier: Identifier, program: Program): D
     return source;
 }
 
-function getType(declaration: ClassDeclaration | InterfaceDeclaration, program: Program): TypeT {
-    let result: TypeT = { symbol: symbolByDeclaration(declaration), interface: isInterfaceDeclaration(declaration), ancestors: [] };
-    if (declaration.heritageClauses) {
-        declaration.heritageClauses.forEach((hc) => hc.types.forEach((ta) => {
-            if (isIdentifier(ta.expression)) {
-                let ancestor = getDeclarationByIdentifier(ta.expression, program);
-                if (isClassDeclaration(ancestor) || isInterfaceDeclaration(ancestor)) {
-                    result.ancestors.push(getType(ancestor, program));
-                }
-            }
-        }));
-    }
+function getType(declaration: ClassDeclaration | InterfaceDeclaration, program: Program): string[] {
+    let result: string[] = [];
+    let type=program.getTypeChecker().getTypeAtLocation(declaration);
+    result.push(symbolByDeclaration(declaration));
+    type.getBaseTypes().forEach(t=>{
+        if(t.isClassOrInterface()){
+            result.push(symbolByDeclaration(getDeclarationFromType(t)));
+        }
+    })
+    
     return result;
 }
 
-export function typeToAst(type: TypeT): ObjectLiteralExpression{ 
-    return createObjectLiteral(
-    [
-        createPropertyAssignment(
-            createIdentifier("symbol"),
-            createStringLiteral(type.symbol)
-        ),
-        createPropertyAssignment(
-            createIdentifier("interface"),
-            type.interface ? createTrue() : createFalse()
-        ),
-        createPropertyAssignment(
-            createIdentifier("ancesttors"),
-            createArrayLiteral(type.ancestors.map(typeToAst), true)
-        )
-    ],
-    false
-);
-}
-
-function addTypeToClass(classDeclaration: ClassDeclaration, type: TypeT) {
+function addTypeToClass(classDeclaration: ClassDeclaration, types: string[]) {
     const elderListProperty = createProperty(
         undefined,
         [createModifier(SyntaxKind.PublicKeyword), createModifier(SyntaxKind.StaticKeyword)],
-        createIdentifier("type"),
+        createIdentifier("types"),
         undefined,
         undefined,
-        typeToAst(type)
+        createArrayLiteral(types.map((s)=>createStringLiteral(s)), true)
     );
     classDeclaration.members = createNodeArray([elderListProperty, ...classDeclaration.members.flat()]);
+}
+
+function isArrayType(t: Type): t is ArrayType {
+    return t.symbol && t.symbol.name == "Array";
+}
+interface ArrayType extends Type {
+    resolvedTypeArguments: Type[];
 }
 
 function getSignatureFromConstructor(classDeclaration: ClassDeclaration, program: Program): ParamTypeT[] {
     let result: ParamTypeT[] = [];
     classDeclaration.members.forEach((ce) => {
         if (isConstructorDeclaration(ce)) {
-            result = ce.parameters.map((pd) => getParamType(pd.type, program));
+            ce.parameters.forEach((p) => {
+                let type = program.getTypeChecker().getTypeAtLocation(p);
+                result.push(getParamType(type,program));
+            });
         }
     });
 
     return result;
 }
 
-export function getParamType(pt: Node, program: Program, arr: boolean = false): ParamTypeT {
+function getDeclarationFromType(t: InterfaceType): ClassDeclaration | InterfaceDeclaration {
+    let result: ClassDeclaration | InterfaceDeclaration = null;
+    if (t.symbol.declarations.some(d => {
+        if (isClassDeclaration(d) || isInterfaceDeclaration(d)) {
+            result = d;
+            return true;
+        }
+        return false;
+
+    })) return result;
+    return null;
+}
+
+export function getParamType(pt: Type, program: Program, arr: boolean = false): ParamTypeT {
     if (!pt)
         return { symbol: null, array: arr, kind: ParamTypeKind.Other };
-    if (isUnionTypeNode(pt)) {
-        return { subType: pt.types.map((n) => getParamType(n, program)), array: arr, kind: ParamTypeKind.Union };
+    if (pt.isUnion()) {
+        return { subType: pt.types.map((n) => getParamType(n, program,arr)), array: arr, kind: ParamTypeKind.Union };
     }
-    if (isIntersectionTypeNode(pt)) {
-        return { subType: pt.types.map((n) => getParamType(n, program)), array: arr, kind: ParamTypeKind.Intersection };
+    if (pt.isIntersection()) {
+        return { subType: pt.types.map((n) => getParamType(n, program,arr)), array: arr, kind: ParamTypeKind.Intersection };
     }
-    if (isArrayTypeNode(pt)) {
-        return getParamType(pt.elementType, program, true);
+    if (isArrayType(pt)) {
+        return getParamType(pt.resolvedTypeArguments[0], program, true);
     }
-    if (isParenthesizedTypeNode(pt)) {
-        return getParamType(pt.type, program, arr);
-    }
-    if (isTypeReferenceNode(pt)) {
-        if (isIdentifier(pt.typeName)) {
-            let declaration = getDeclarationByIdentifier(pt.typeName, program);
-            if (isClassDeclaration(declaration) || isInterfaceDeclaration(declaration)) {
-                if (declaration.name) {
-                    return { symbol: symbolByDeclaration(declaration), array: arr, kind: ParamTypeKind.TypeRef };
-                }
-                return { array: arr, kind: ParamTypeKind.Other };
+    if (pt.isClassOrInterface()) {
+        let declaration = getDeclarationFromType(pt);
+        if (isClassDeclaration(declaration) || isInterfaceDeclaration(declaration)) {
+            if (declaration.name) {
+                return { symbol: symbolByDeclaration(declaration), array: arr, kind: ParamTypeKind.TypeRef };
             }
+            return { array: arr, kind: ParamTypeKind.Other };
         }
     }
-    return { symbol: pt.getText(), array: arr, kind: ParamTypeKind.Other };
+    return { symbol: program.getTypeChecker().typeToString(pt), array: arr, kind: ParamTypeKind.Other };
 }
 
 export function paramTypeToAST(param: ParamTypeT): ObjectLiteralExpression {

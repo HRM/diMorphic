@@ -1,5 +1,5 @@
-import { ReflectionData, ParamType, ParamTypeKind, isArray, isIntersection, isTypeRef, isUnion, Type, refDataFromClass, refDataFromObject, classType } from './Reflector'
-import { getPositionOfLineAndCharacter } from 'typescript';
+import { ReflectionData, ParamType, ParamTypeKind, isArray, isIntersection, isTypeRef, isUnion, Type, refDataFromClass, refDataFromObject, classType, createTypeReffFromClass } from './Reflector'
+import { getPositionOfLineAndCharacter, isGetAccessor, isForOfStatement } from 'typescript';
 
 
 export class CircularDependencyError extends Error {
@@ -21,12 +21,12 @@ export class NotResolvableDependencyError extends Error {
 }
 
 
-function  ArrayifyParamType(p:ParamType,arr:boolean=true):ParamType{
-    p.array=arr||p.array;
+function ArrayifyParamType(p: ParamType, arr: boolean = true): ParamType {
+    p.array = arr || p.array;
     return p;
 }
 
-function combineToIntersections(ptll: ParamType[][],array=false): ParamType[] {
+function combineToIntersections(ptll: ParamType[][], array = false): ParamType[] {
     let result: ParamType[] = [];
     if (ptll.length == 1) {
         ptll[0].forEach((pt) => {
@@ -51,86 +51,86 @@ function combineToIntersections(ptll: ParamType[][],array=false): ParamType[] {
     return result;
 }
 
-function deconstructIntersection(pt: ParamType,array=false): ParamType[] {
+function deconstructIntersection(pt: ParamType, array = false): ParamType[] {
     if (isUnion(pt)) {
         let result: ParamType[] = [];
         pt.subType.forEach((spt) => {
             if (isTypeRef(spt)) {
-                result.push(ArrayifyParamType({...spt},array));
+                result.push(ArrayifyParamType({ ...spt }, array));
             }
-            else result = [...result, ...deconstructIntersection(spt,array)];
+            else result = [...result, ...deconstructIntersection(spt, array)];
         });
         return result;
     }
     else if (isIntersection(pt)) {
         let interList: ParamType[][] = [];
         pt.subType.forEach((spt) => {
-            if (isTypeRef(spt)) interList.push([ArrayifyParamType({...spt},array)]);
-            else interList.push(deconstructIntersection(spt,array));
+            if (isTypeRef(spt)) interList.push([ArrayifyParamType({ ...spt }, array)]);
+            else interList.push(deconstructIntersection(spt, array));
         });
-        return combineToIntersections(interList,array).map(
-            pt=>{pt.subType=[...(new Set(pt.subType)).values()];return pt});
+        return combineToIntersections(interList, array).map(
+            pt => { pt.subType = [...(new Set(pt.subType)).values()]; return pt });
     }
     else return [];
 };
 
-export function subSolveParamList(pl:ParamType[],array:boolean=false,top:boolean=false):ParamType[]{
-    let result:ParamType[]=[];
-    pl.forEach((p)=>{
-        if(isTypeRef(p))result.push(ArrayifyParamType({...p},isArray(p)||array));
-        else if(isIntersection(p)){
-            if(top)
-            result.push({ array: array, kind: ParamTypeKind.Union, subType: deconstructIntersection(p,isArray(p)||array) });
+export function subSolveParamList(pl: ParamType[], array: boolean = false, top: boolean = false): ParamType[] {
+    let result: ParamType[] = [];
+    pl.forEach((p) => {
+        if (isTypeRef(p)) result.push(ArrayifyParamType({ ...p }, isArray(p) || array));
+        else if (isIntersection(p)) {
+            if (top)
+                result.push({ array: array, kind: ParamTypeKind.Union, subType: deconstructIntersection(p, isArray(p) || array) });
             else
-            result.push(...deconstructIntersection(p,isArray(p)||array));
+                result.push(...deconstructIntersection(p, isArray(p) || array));
         }
-        else if(isUnion(p)){
-            if(top)
-            result.push({ array: array, kind: ParamTypeKind.Union, subType: subSolveParamList(p.subType ,isArray(p)||array) });
+        else if (isUnion(p)) {
+            if (top)
+                result.push({ array: array, kind: ParamTypeKind.Union, subType: subSolveParamList(p.subType, isArray(p) || array) });
             else
-            result.push(...subSolveParamList(p.subType ,isArray(p) || array));
+                result.push(...subSolveParamList(p.subType, isArray(p) || array));
         }
-        else if(top)result.push({ array: isArray(p)||array, kind: ParamTypeKind.Other});
+        else if (top) result.push({ array: isArray(p) || array, kind: ParamTypeKind.Other });
     });
     return result;
 }
 
-function stringXor(a:string,b:string):string{
-    let result="";
-    const l=Math.min(a.length,b.length);
-    for(let i=0;i<l;++i){
-        result+=String.fromCharCode(a.charCodeAt(i) ^ b.charCodeAt(i));
+function stringXor(a: string, b: string): string {
+    let result = "";
+    const l = Math.min(a.length, b.length);
+    for (let i = 0; i < l; ++i) {
+        result += String.fromCharCode(a.charCodeAt(i) ^ b.charCodeAt(i));
     }
-    result+=((a.length>b.length)?a:b).substring(l);
+    result += ((a.length > b.length) ? a : b).substring(l);
     return result;
 }
 
-export function hashFromParamType(p:ParamType):string{
-    let result:string=p.array?"a":"na";
-    if(isIntersection(p)){
-        result+="inter";
-        p.subType.forEach(st=>result=stringXor(hashFromParamType(st),result));
+export function hashFromParamType(p: ParamType): string {
+    let result: string = p.array ? "a" : "na";
+    if (isIntersection(p)) {
+        result += "inter";
+        p.subType.forEach(st => result = stringXor(hashFromParamType(st), result));
         return result;
     }
-    if(isUnion(p)){
-        result+="union";
-        p.subType.forEach(st=>result=stringXor(hashFromParamType(st),result));
+    if (isUnion(p)) {
+        result += "union";
+        p.subType.forEach(st => result = stringXor(hashFromParamType(st), result));
         return result;
     }
-    if(isTypeRef(p)){
-        result+="ref";
-        result=stringXor(p.symbol,result);
+    if (isTypeRef(p)) {
+        result += "ref";
+        result = stringXor(p.symbol, result);
         return result;
     }
     return "other";
 }
 
-export function solveParamList(pl:ParamType[]):ParamType[]{
-    let unchecked=subSolveParamList(pl,false,true);
-    const checker= new Set<string>();
-    unchecked.filter((pt)=>{
-        let hash=hashFromParamType(pt);
-        if(checker.has(hash))return false;
+export function solveParamList(pl: ParamType[]): ParamType[] {
+    let unchecked = subSolveParamList(pl, false, true);
+    const checker = new Set<string>();
+    unchecked.filter((pt) => {
+        let hash = hashFromParamType(pt);
+        if (checker.has(hash)) return false;
         checker.add(hash);
         return true;
     });
@@ -222,64 +222,69 @@ export class DiContainer {
     }
 
     private resolveParamList(pl: ParamType[], cdpiCheck: Set<string>): (Object | Object[])[] {
-        let error = false;
         let result: Object[] = [];
-        pl.forEach((ptype) => {
+        if(pl.every((ptype) => {
             let resolved = this.resolveParamTypeKind(ptype, cdpiCheck);
             if (resolved) {
                 result.push(resolved);
-            } else error = true;
-        })
-        if (!error) return result;
-        else return null;
+                return true;
+            }
+            return false;
+        }))return result;
+        return null;
     }
 
     private resolveTypeRefParam(pt: ParamType, cdpiCheck: Set<string>): Object | Object[] {
         let nodes: InjectNode[] = this.nodeMap.get(pt.symbol);
         if (!nodes) return null;
-        else if (isArray(pt)) {
             let result: Object[] = [];
-            let error = false;
-            nodes.forEach((injectNode) => {
+            let finder=(injectNode:InjectNode) => {
                 let params = this.resolveParamList(injectNode.requirements, cdpiCheck);
                 if (params) {
                     result.push(injectNode.resolve(params));
-                } else {
-                    error = true;
-                }
-            });
-            if (!error) return result;
-            else return null;
-        } else {
-            let params = null;
-            let i: number;
-            for (i = 0; i < nodes.length && !params; ++i) {
-                let params = this.resolveParamList(nodes[i].requirements, cdpiCheck);
-            }
-            if (params) return nodes[i].resolve(params);
-            else return null;
-        }
+                    return true;
+                } else return false;
+            };
+            if(isArray(pt))if(nodes.every(finder))return result;
+            if(nodes.some(finder))return result[0];
+            return null;
     }
 
     private resolveUnionParam(pt: ParamType, cdpiCheck: Set<string>): Object | Object[] {
-        if (isArray(pt) && !isArray(pt.subType[0])) {
-            pt.subType.forEach((st) => {
-                st.array = true;
-            });
-        }
         let result: Object | Object[] = null;
-        for (let i = 0; i < pt.subType.length && !result; ++i) {
-            result = this.resolveParamTypeKind(pt.subType[i], cdpiCheck);
-        }
-        return result;
+        if(pt.subType.some(pts=> {
+            return result = this.resolveParamTypeKind(pts, cdpiCheck);
+        }))return result;
+        return null;
     }
 
     private resolveIntersectionParam(pt: ParamType, cdpiCheck: Set<string>): Object | Object[] {
-        let nodes: InjectNode[] = this.nodeMap.get(pt.symbol);
-        if (!nodes) return null;
-        else if (isArray(pt)) {
-            
-        }
+        let smallest: InjectNode[]=null;
+        let smallestLength = Infinity;
+       if(!pt.subType.every((t) => {
+            if (this.nodeMap.has(t.symbol)) {
+                let sm:InjectNode[];
+                if ((sm=this.nodeMap.get(t.symbol)).length < smallestLength) {
+                    smallestLength=sm.length;
+                    smallest=sm;
+                }
+                return true;
+            }else return false;
+        })) return null;
+        let result:Object[]=[];
+        let finder=(le:InjectNode)=>{
+            if(!(le.requirements)||pt.subType.every(pt=>le.typeSet.has(pt.symbol))){
+                let resolved=this.resolveParamList(le.requirements,cdpiCheck);
+                if(resolved){
+                    result.push(le.resolve(resolved));
+                    return true;
+                }
+                return false;
+            }
+        };
+        if(isArray(pt))if(smallest.every(finder))return result;
+        if(smallest.some(finder))return result[0];
+        return null;
     }
 
     public registerClass(cls: classType) {
@@ -293,5 +298,13 @@ export class DiContainer {
     }
     public registerProvier(cls: classType, func: () => Object) {
         this.registerInjectNode(createInjectNodeFromFunction(cls, func));
+    }
+
+    public resolveClass<T>(cls: classType<T>):T{
+        return (this.resolveTypeRefParam(createTypeReffFromClass(cls),new Set()) as T);
+    }
+
+    public resolveAllClass<T>(cls:classType<T>):T{
+        return (this.resolveTypeRefParam(createTypeReffFromClass(cls,true),new Set()) as T);
     }
 }

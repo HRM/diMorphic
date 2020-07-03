@@ -14,7 +14,7 @@ class Alpha {
     }
 }
 exports.Alpha = Alpha;
-Alpha.type = { symbol: "Alpha_0fea36f7b769591f8e587980dfced40c", interface: false, ancesttors: [] };
+Alpha.type = { symbol: "Alpha_0fea36f7b769591f8e587980dfced40c", interface: false, ancestors: [] };
 Alpha.constructorSigniture = [];
 let Beta = class Beta {
     constructor(a) {
@@ -25,9 +25,9 @@ let Beta = class Beta {
         this.a.print();
     }
 };
-Beta.type = { symbol: "Beta_6e527fffc62ef77bf13edffdb4724100", interface: false, ancesttors: [
-        { symbol: "gamma_09a6718fc2e9c33eac54bf712f2b9036", interface: true, ancesttors: [
-                { symbol: "omega_ce4cadd1fef41dafa26a976f06eb87ce", interface: true, ancesttors: [] }
+Beta.type = { symbol: "Beta_6e527fffc62ef77bf13edffdb4724100", interface: false, ancestors: [
+        { symbol: "gamma_09a6718fc2e9c33eac54bf712f2b9036", interface: true, ancestors: [
+                { symbol: "omega_ce4cadd1fef41dafa26a976f06eb87ce", interface: true, ancestors: [] }
             ] }
     ] };
 Beta.constructorSigniture = [
@@ -45,23 +45,23 @@ class Ceta extends Beta {
     }
 }
 exports.Ceta = Ceta;
-Ceta.type = { symbol: "Ceta_764553753e7d82f300ecc292f79c4fa7", interface: false, ancesttors: [
-        { symbol: "Beta_6e527fffc62ef77bf13edffdb4724100", interface: false, ancesttors: [
-                { symbol: "gamma_09a6718fc2e9c33eac54bf712f2b9036", interface: true, ancesttors: [
-                        { symbol: "omega_ce4cadd1fef41dafa26a976f06eb87ce", interface: true, ancesttors: [] }
+Ceta.type = { symbol: "Ceta_764553753e7d82f300ecc292f79c4fa7", interface: false, ancestors: [
+        { symbol: "Beta_6e527fffc62ef77bf13edffdb4724100", interface: false, ancestors: [
+                { symbol: "gamma_09a6718fc2e9c33eac54bf712f2b9036", interface: true, ancestors: [
+                        { symbol: "omega_ce4cadd1fef41dafa26a976f06eb87ce", interface: true, ancestors: [] }
                     ] }
             ] },
-        { symbol: "gamma_09a6718fc2e9c33eac54bf712f2b9036", interface: true, ancesttors: [
-                { symbol: "omega_ce4cadd1fef41dafa26a976f06eb87ce", interface: true, ancesttors: [] }
+        { symbol: "gamma_09a6718fc2e9c33eac54bf712f2b9036", interface: true, ancestors: [
+                { symbol: "omega_ce4cadd1fef41dafa26a976f06eb87ce", interface: true, ancestors: [] }
             ] }
     ] };
 Ceta.constructorSigniture = [
     { subType: [
-            { symbol: "gamma_09a6718fc2e9c33eac54bf712f2b9036", array: false, kind: 2 },
-            { symbol: "Beta_6e527fffc62ef77bf13edffdb4724100", array: false, kind: 2 }
+            { symbol: "Beta_6e527fffc62ef77bf13edffdb4724100", array: false, kind: 2 },
+            { symbol: "gamma_09a6718fc2e9c33eac54bf712f2b9036", array: false, kind: 2 }
         ], array: false, kind: 1 },
     { subType: [
-            { symbol: "gamma_09a6718fc2e9c33eac54bf712f2b9036", array: true, kind: 2 },
-            { symbol: "string", array: false, kind: 3 }
+            { symbol: "string", array: false, kind: 3 },
+            { symbol: "gamma_09a6718fc2e9c33eac54bf712f2b9036", array: true, kind: 2 }
         ], array: false, kind: 1 }
 ];

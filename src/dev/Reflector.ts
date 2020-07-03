@@ -1,8 +1,8 @@
 
 export enum ParamTypeKind { Intersection = 0, Union = 1, TypeRef = 2, Other = 3 }
 
-export interface classType{
-    new(...args:any):Object;
+export interface classType<T extends Object = Object>{
+    new(...args:any):T;
 }
 
 export interface Type {
@@ -15,6 +15,10 @@ export interface ParamType {
     symbol?: string | null;
     array: boolean;
     kind: ParamTypeKind;
+}
+
+export function createTypeReffFromClass(cls:classType,all:boolean = false):ParamType{
+    return {symbol: refDataFromClass(cls).type.symbol,array:all,kind: ParamTypeKind.TypeRef};
 }
 
 export interface ReflectionData{

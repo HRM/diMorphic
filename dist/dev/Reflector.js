@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.isUnion = exports.isIntersection = exports.isArray = exports.isTypeRef = exports.refDataFromObject = exports.refDataFromClass = exports.ParamTypeKind = void 0;
+exports.isUnion = exports.isIntersection = exports.isArray = exports.isTypeRef = exports.refDataFromObject = exports.refDataFromClass = exports.createTypeReffFromClass = exports.ParamTypeKind = void 0;
 var ParamTypeKind;
 (function (ParamTypeKind) {
     ParamTypeKind[ParamTypeKind["Intersection"] = 0] = "Intersection";
@@ -8,6 +8,10 @@ var ParamTypeKind;
     ParamTypeKind[ParamTypeKind["TypeRef"] = 2] = "TypeRef";
     ParamTypeKind[ParamTypeKind["Other"] = 3] = "Other";
 })(ParamTypeKind = exports.ParamTypeKind || (exports.ParamTypeKind = {}));
+function createTypeReffFromClass(cls, all = false) {
+    return { symbol: refDataFromClass(cls).type.symbol, array: all, kind: ParamTypeKind.TypeRef };
+}
+exports.createTypeReffFromClass = createTypeReffFromClass;
 function refDataFromClass(cls) {
     if (cls.type) {
         return cls;
